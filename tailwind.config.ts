@@ -2,11 +2,11 @@
 export default {
 	plugins: [],
 	theme: {
-		extend: {},
+		extend: {}
 	},
 	content: ['./index.html', './src/**/*.{svelte,js,ts}'], // for unused CSS
 	variants: {
-		extend: {},
+		extend: {}
 	},
-	darkMode: false, // or 'media' or 'class'
+	darkMode: 'media'
 }
