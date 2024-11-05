@@ -27,3 +27,7 @@ export interface Round {
 	input: string
 	output: string
 }
+
+export interface MessageEventToWorker extends MessageEvent {
+	data: string
+}

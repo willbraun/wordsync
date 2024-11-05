@@ -9,7 +9,6 @@
 	} from './types'
 
 	let input = $state('')
-	let output = $state('')
 	let error = $state('')
 	let ready = $state(false)
 	let progressItems: WorkerMessage[] = $state([])
@@ -38,8 +37,8 @@
 				break
 			case WorkerMessageStatus.COMPLETE:
 				loading = false
-				output = e.data?.output ?? 'no response'
-				rounds = [...rounds, { input, output }]
+				rounds = [...rounds, { input, output: e.data?.output ?? 'no response' }]
+				input = ''
 				break
 		}
 	}
@@ -56,15 +55,12 @@
 		if (!input) {
 			error = 'Please enter some text'
 			return
-		} else {
-			loading = true
-			error = ''
 		}
 
-		worker.postMessage({
-			previousInput: rounds.at(-1)?.input ?? '',
-			prevousOutput: rounds.at(-1)?.output ?? ''
-		})
+		loading = true
+		error = ''
+
+		worker.postMessage(JSON.stringify(rounds))
 	}
 </script>
 
@@ -88,24 +84,19 @@
 				</div>
 			{/each}
 		</div>
-		<div class="">
-			<div class="grid grid-cols-2 gap-4">
-				<input
-					bind:value={input}
-					class="w-full rounded border border-gray-300 p-2"
-					placeholder="Enter guess here"
-				/>
-				<div class="w-full rounded border border-gray-300 bg-white p-2">
-					<p>{output}</p>
-				</div>
-			</div>
+		<form>
+			<input
+				bind:value={input}
+				class="w-full rounded border border-gray-300 p-2"
+				placeholder="Enter guess here"
+			/>
 			<div class="h-2">
 				{#if error}
 					<p class="text-sm text-red-500">{error}</p>
 				{/if}
 			</div>
 			<button
-				type="button"
+				type="submit"
 				disabled={loading}
 				aria-label="Guess"
 				onclick={guessWord}
@@ -123,6 +114,12 @@
 					Guess a word!
 				{/if}
 			</button>
-		</div>
+		</form>
+		{#each progressItems as progressItem}
+			<div class="flex justify-between">
+				<p>{progressItem.file}</p>
+				<p>{progressItem.progress}%</p>
+			</div>
+		{/each}
 	</div>
 </main>
