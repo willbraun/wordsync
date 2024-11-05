@@ -1,15 +1,15 @@
 import {
-	Pipeline,
 	pipeline,
 	Text2TextGenerationPipeline,
 	type PipelineType,
 	type Text2TextGenerationSingle
 } from '@huggingface/transformers'
 import type { MessageEventToWorker, Round } from './types'
+import nlp from 'compromise'
 
 class MyPipeline {
 	static task: PipelineType = 'text2text-generation'
-	static model = 'Xenova/LaMini-Flan-T5-783M'
+	static model = 'Xenova/LaMini-T5-738M'
 	static instance: Promise<Text2TextGenerationPipeline> | null = null
 
 	// Progress callback added to the pipeline so that we can track model loading.
@@ -26,41 +26,59 @@ class MyPipeline {
 
 // Listen for messages from the main thread
 self.addEventListener('message', async (e: MessageEventToWorker) => {
-	// Retrieve the pipeline. When called for the first time this will load the pipeline and save it for future use.
+	// Create the pipeline. When called for the first time this will load the pipeline and save them for future use.
 	let generator = await MyPipeline.getInstance((progress) => {
 		self.postMessage(progress)
 	})
 
 	const rounds: Round[] = JSON.parse(e.data)
 
-	// Generate the response
-	let rawText = ''
-	const doPrompt = async () => {
-		let prompt
-		if (rounds.length > 0) {
-			const previousRound = rounds.at(-1) ?? { input: '', output: '' }
-			prompt = `Generate a ONE WORD noun that is equally related to both of the following words: ${previousRound.input} and ${previousRound.output}. Your word CANNOT be in this list AND CANNOT INCLUDE words from this list: ${rounds.map((round) => `${round.input}, ${round.output}`).join(', ')}.`
-		} else {
-			prompt = 'Generate a ONE WORD noun. Your response must be one word.'
-		}
-
-		let output = (await generator(prompt, {
-			temperature: 2
-		})) as Text2TextGenerationSingle[]
-
-		return output[0]?.generated_text
+	// Generate a word
+	if (rounds.length === 0) {
+		// TODO - Maybe start with a random word from a list of words
+		self.postMessage({
+			status: 'complete',
+			output: 'apple'
+		})
+		return
 	}
 
-	// Check if response is valid and prompt again if not
-	rawText = await doPrompt()
+	let word = ''
+	let formatted = ''
+	const doPrompt = async (lastWord: string = '') => {
+		const previousRound = rounds[rounds.length - 1]
+		console.log(previousRound)
+		const prompt = `Return a single word that is associated with these two words (${previousRound.input}, ${previousRound.output}). Previous words were ${rounds.map((round) => `${round.input}, ${round.output}`).join(', ')}, do not show them again. Only respond with "The word is: [word]".`
+		console.log(prompt)
 
-	let formattedOutput = rawText
-		.toLowerCase()
-		.trim()
-		.replaceAll(/[^a-zA-Z]/g, '')
+		const output = (await generator(prompt, {
+			temperature: 2,
+			repetition_penalty: 5
+		})) as Text2TextGenerationSingle[]
+
+		console.log(output[0].generated_text)
+		const generated = nlp(output[0].generated_text).clauses().out('array').at(-1)
+		console.log(generated)
+		return generated
+	}
+
+	while (
+		!word ||
+		word.split(' ').length !== 1 ||
+		rounds.some((round) => round.input === formatted || round.output === formatted)
+	) {
+		word = await doPrompt()
+		formatted = word
+			.replaceAll(/[^a-zA-Z]/g, '')
+			.trim()
+			.toLowerCase()
+		console.log(rounds)
+		console.log(rounds[0].output === formatted)
+		console.log(rounds.some((round) => round.input === formatted || round.output === formatted))
+	}
 
 	self.postMessage({
 		status: 'complete',
-		output: formattedOutput
+		output: formatted
 	})
 })
